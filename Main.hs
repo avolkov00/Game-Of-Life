@@ -1,3 +1,5 @@
+-- Основной файл проекта содержащий все функции логики и основную функцию отображения на UI
+
 module Main where
 
 import Data.Char
@@ -61,12 +63,24 @@ boardCF brd flg =
       rotateAngle = rotateAngle brd
     }
 
-boardCM :: Board -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий сдвинуть поле
-boardCM brd (x, y) =
+boardCDrag :: Board -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий сдвинуть поле
+boardCDrag brd (x, y) =
   Board
     { flag = flag brd,
       coords = coords brd,
       mv = ((fst (mv brd)) + ((x - (fst (lastCoords brd))) / zoom brd), (snd (mv brd)) + ((y - snd (lastCoords brd)) / zoom brd)),
+      zoom = zoom brd,
+      rmb = rmb brd,
+      lastCoords = (x, y),
+      rotateAngle = rotateAngle brd
+    }
+
+boardCArrow :: Board -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий сдвинуть поле
+boardCArrow brd (x, y) =
+  Board
+    { flag = flag brd,
+      coords = coords brd,
+      mv = ((fst (mv brd)) + x, (snd (mv brd)) + y),
       zoom = zoom brd,
       rmb = rmb brd,
       lastCoords = (x, y),
@@ -193,16 +207,19 @@ handleKeyPress (EventKey (MouseButton LeftButton) Down _ (xc, yc)) brd = addElem
     pos = calcCoords brd (xc, yc)
 handleKeyPress (EventKey (MouseButton RightButton) Down _ (xc, yc)) brd = boardCRMB brd True (xc, yc) -- начать драг
 handleKeyPress (EventKey (MouseButton RightButton) Up _ (xc, yc)) brd = boardCRMB brd False (xc, yc) -- закончить драг
-handleKeyPress (EventKey (SpecialKey KeyUp) Down _ _) brd = boardCM brd (0.0, -10) -- вверх
-handleKeyPress (EventKey (SpecialKey KeyDown) Down _ _) brd = boardCM brd (0.0, 10) -- вниз
-handleKeyPress (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCM brd (-10, 0.0) -- влево
-handleKeyPress (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCM brd (10, 0.0) -- вправо
+handleKeyPress (EventKey (SpecialKey KeyUp) Down _ _) brd = boardCArrow brd (0.0, -10) -- вверх
+handleKeyPress (EventKey (SpecialKey KeyDown) Down _ _) brd = boardCArrow brd (0.0, 10) -- вниз
+handleKeyPress (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCArrow brd (-10, 0.0) -- влево
+handleKeyPress (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCArrow brd (10, 0.0) -- вправо
 handleKeyPress (EventKey (MouseButton WheelUp) _ _ _) brd = boardCZ brd True -- zoom in
 handleKeyPress (EventKey (MouseButton WheelDown) _ _ _) brd = boardCZ brd False -- zoom out
 handleKeyPress (EventKey (SpecialKey KeyPageUp) _ _ _) brd = boardCZ brd True -- zoom in
 handleKeyPress (EventKey (SpecialKey KeyPageDown) _ _ _) brd = boardCZ brd False -- zoom out
-handleKeyPress (EventKey (Char a) Down _ (xc, yc)) brd =
-  -- нарисовать ячейку
+handleKeyPress (EventMotion (x, y)) brd =
+  if rmb brd -- драг
+    then boardCDrag brd (x, y)
+    else brd
+handleKeyPress (EventKey (Char a) Down _ (xc, yc)) brd =  -- нарисовать ячейку
   if ind >= 0 && ind < (templLength allDraws)
     then addElementsToBoard brd pos (allDraws !! ind)
     else
@@ -212,10 +229,6 @@ handleKeyPress (EventKey (Char a) Down _ (xc, yc)) brd =
   where
     pos = calcCoords brd (xc, yc)
     ind = ord a - ord '0' - 1
-handleKeyPress (EventMotion (x, y)) brd =
-  if rmb brd -- драг
-    then boardCM brd (x, y)
-    else brd
 handleKeyPress _ brd = brd -- Ignore other events
 
 main = play window background fps example render handleKeyPress update -- Главная функция GUI
