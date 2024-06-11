@@ -225,7 +225,9 @@ handleKeyPress (EventKey (Char a) Down _ (xc, yc)) brd =  -- нарисоват�
     else
       if a == 'r'
         then boardCR brd
-        else brd
+        else if a =='c'
+          then boardCC brd []
+          else brd
   where
     pos = calcCoords brd (xc, yc)
     ind = ord a - ord '0' - 1
