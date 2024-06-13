@@ -1,9 +1,11 @@
 dist
 dist-*
+temp*
 cabal-dev
 *.o
 *.hi
 *.hie
+*.exe
 *.chi
 *.chs.h
 *.dyn_o

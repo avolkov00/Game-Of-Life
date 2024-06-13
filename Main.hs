@@ -3,7 +3,6 @@
 module Main where
 
 import Data.Char
-import Data.IORef
 import GHC.Float.RealFracMethods
 import Graphics.Gloss
 import Graphics.Gloss.Data.Color
@@ -209,8 +208,8 @@ handleKeyPress (EventKey (MouseButton RightButton) Down _ (xc, yc)) brd = boardC
 handleKeyPress (EventKey (MouseButton RightButton) Up _ (xc, yc)) brd = boardCRMB brd False (xc, yc) -- закончить драг
 handleKeyPress (EventKey (SpecialKey KeyUp) Down _ _) brd = boardCArrow brd (0.0, -10) -- вверх
 handleKeyPress (EventKey (SpecialKey KeyDown) Down _ _) brd = boardCArrow brd (0.0, 10) -- вниз
-handleKeyPress (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCArrow brd (-10, 0.0) -- влево
-handleKeyPress (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCArrow brd (10, 0.0) -- вправо
+handleKeyPress (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCArrow brd (10, 0.0) -- влево
+handleKeyPress (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCArrow brd (-10, 0.0) -- вправо
 handleKeyPress (EventKey (MouseButton WheelUp) _ _ _) brd = boardCZ brd True -- zoom in
 handleKeyPress (EventKey (MouseButton WheelDown) _ _ _) brd = boardCZ brd False -- zoom out
 handleKeyPress (EventKey (SpecialKey KeyPageUp) _ _ _) brd = boardCZ brd True -- zoom in
