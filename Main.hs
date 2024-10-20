@@ -3,12 +3,14 @@
 module Main where
 
 import Data.Char
+import Data.List
+import Data.Maybe
 import GHC.Float.RealFracMethods
 import Graphics.Gloss
 import Graphics.Gloss.Data.Color
 import Graphics.Gloss.Data.Picture
-import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.IO.Game
+import System.IO
 
 speed :: Int
 speed = 5
@@ -22,96 +24,38 @@ data Board = Board -- Основная структура описания по�
     zoom :: Float, -- зум
     rmb :: Bool, -- флаг зажатия пкм
     lastCoords :: (Float, Float), -- последние координаты курсова для drag-а
-    rotateAngle :: Int -- поворот шаблона при появлении
+    rotateAngle :: Int, -- поворот шаблона при появлении
+    selectedPattern :: Maybe [Pos] -- выбранный шаблон
   }
   deriving (Show)
 
 boardCC :: Board -> [Pos] -> Board -- Конструктор копирования, также позволяющий изменить координаты клеток
 boardCC brd crd =
-  Board
-    { flag = flag brd,
-      coords = crd,
-      mv = mv brd,
-      zoom = zoom brd,
-      rmb = rmb brd,
-      lastCoords = lastCoords brd,
-      rotateAngle = rotateAngle brd
-    }
+  brd {coords = crd}
 
 boardCRMB :: Board -> Bool -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий изменить сдвиг поля с использованием ПКМ
 boardCRMB brd lm lc =
-  Board
-    { flag = flag brd,
-      coords = coords brd,
-      mv = mv brd,
-      zoom = zoom brd,
-      rmb = lm,
-      lastCoords = lc,
-      rotateAngle = rotateAngle brd
-    }
+  brd {rmb = lm, lastCoords = lc}
 
 boardCF :: Board -> Bool -> Board -- Конструктор копирования, также позволяющий установить флаг паузы
 boardCF brd flg =
-  Board
-    { flag = flg,
-      coords = coords brd,
-      mv = mv brd,
-      zoom = zoom brd,
-      rmb = rmb brd,
-      lastCoords = lastCoords brd,
-      rotateAngle = rotateAngle brd
-    }
+  brd {flag = flg}
 
 boardCDrag :: Board -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий сдвинуть поле
 boardCDrag brd (x, y) =
-  Board
-    { flag = flag brd,
-      coords = coords brd,
-      mv = ((fst (mv brd)) + ((x - (fst (lastCoords brd))) / zoom brd), (snd (mv brd)) + ((y - snd (lastCoords brd)) / zoom brd)),
-      zoom = zoom brd,
-      rmb = rmb brd,
-      lastCoords = (x, y),
-      rotateAngle = rotateAngle brd
-    }
+  brd {mv = ((fst (mv brd)) + ((x - (fst (lastCoords brd))) / zoom brd), (snd (mv brd)) + ((y - snd (lastCoords brd)) / zoom brd)), lastCoords = (x, y)}
 
 boardCArrow :: Board -> (Float, Float) -> Board -- Конструктор копирования, также позволяющий сдвинуть поле
 boardCArrow brd (x, y) =
-  Board
-    { flag = flag brd,
-      coords = coords brd,
-      mv = ((fst (mv brd)) + x, (snd (mv brd)) + y),
-      zoom = zoom brd,
-      rmb = rmb brd,
-      lastCoords = (x, y),
-      rotateAngle = rotateAngle brd
-    }
+  brd {mv = ((fst (mv brd)) + x, (snd (mv brd)) + y), lastCoords = (x, y)}
 
 boardCZ :: Board -> Bool -> Board -- Конструктор копирования, также позволяющий изменить зум
 boardCZ brd a =
-  Board
-    { flag = flag brd,
-      coords = coords brd,
-      mv = mv brd,
-      zoom =
-        if a
-          then zoom brd * 1.1
-          else zoom brd / 1.1,
-      rmb = rmb brd,
-      lastCoords = lastCoords brd,
-      rotateAngle = rotateAngle brd
-    }
+  brd {zoom = if a then zoom brd * 1.1 else zoom brd / 1.1}
 
 boardCR :: Board -> Board -- Конструктор копирования, также позволяющий изменить поворот шаблонов
 boardCR brd =
-  Board
-    { flag = flag brd,
-      coords = coords brd,
-      mv = mv brd,
-      zoom = zoom brd,
-      rmb = rmb brd,
-      lastCoords = lastCoords brd,
-      rotateAngle = mod (rotateAngle brd + 1) 4
-    }
+  brd {rotateAngle = mod (rotateAngle brd + 1) 4}
 
 rotateC :: Pos -> Pos -- Функция поворота клетки на 90 градусов
 rotateC (x, y) = (y, (-1) * x)
@@ -131,7 +75,8 @@ example =
       zoom = 1,
       rmb = False,
       lastCoords = (0, 0),
-      rotateAngle = 0
+      rotateAngle = 0,
+      selectedPattern = Nothing
     }
 
 isAlive :: Board -> Pos -> Bool -- Проверка находится ли клетка на доске
@@ -194,75 +139,68 @@ update _ brd =
     then brd
     else nextgen brd
 
-render brd = scale (zoom brd) (zoom brd) (pictures $ map (toPicture . rescale) (coords brd)) -- Функция отрисовки доски
+render :: [(String, [Pos])] -> Board -> Picture -- Функция отрисовки доски
+render patterns brd = pictures ([scale (zoom brd) (zoom brd) (pictures $ map (toPicture . rescale) (coords brd))] 
+  ++ patternButtons 
+  ++ [translate 208 250 (scale 0.15 0.15 (text "r - rotate template"))] 
+  ++ [translate 208 230 (scale 0.15 0.15 (text " spacebar - pause"))] 
+  ++ [translate 208 210 (scale 0.15 0.15 (text " hold RMB - drag"))] 
+  ++ [translate 213 190 (scale 0.15 0.15 (text "    LMB - draw"))] 
+  ++ [translate 201 170 (scale 0.15 0.15 (text "PgUp/Down - zoom"))] 
+  
+  )
   where
     rescale (x, y) = (fromIntegral (x * 10), fromIntegral (y * 10))
     toPicture (x, y) = translate (x + fst (mv brd)) (y + snd (mv brd)) $ rectangleSolid 10 10
+    patternButtons = zipWith drawButton [0 ..] (map fst patterns)
+    drawButton i name = translate (-400) (250 - fromIntegral i * 30) $ scale 0.1 0.1 $ pictures [text name, translate (400) (100) (rectangleWire 800 300)]
 
-handleKeyPress :: Event -> Board -> Board -- Функция обработки нажатий
-handleKeyPress (EventKey (SpecialKey KeySpace) Down _ _) brd = boardCF brd (not (flag brd)) -- установка паузы
-handleKeyPress (EventKey (MouseButton LeftButton) Down _ (xc, yc)) brd = addElementsToBoard brd pos [(0, 0)] -- нарисовать ячейку
+handleKeyPress :: [(String, [Pos])] -> Event -> Board -> Board -- Функция обработки нажатий
+handleKeyPress patterns (EventKey (SpecialKey KeySpace) Down _ _) brd = boardCF brd (not (flag brd))
+handleKeyPress patterns (EventKey (MouseButton LeftButton) Down _ (xc, yc)) brd =
+  case selectedPattern brd of
+    Just pattern -> addElementsToBoard brd {selectedPattern = Nothing} pos pattern
+    Nothing ->
+      let buttonIndex = floor ((280 - yc) / 30)
+       in if buttonIndex >= 0 && buttonIndex < length patterns && xc < -280
+            then brd {selectedPattern = Just (snd (patterns !! buttonIndex))}
+            else addElementsToBoard brd pos [(0, 0)] -- нарисовать ячейку
   where
     pos = calcCoords brd (xc, yc)
-handleKeyPress (EventKey (MouseButton RightButton) Down _ (xc, yc)) brd = boardCRMB brd True (xc, yc) -- начать драг
-handleKeyPress (EventKey (MouseButton RightButton) Up _ (xc, yc)) brd = boardCRMB brd False (xc, yc) -- закончить драг
-handleKeyPress (EventKey (SpecialKey KeyUp) Down _ _) brd = boardCArrow brd (0.0, -10) -- вверх
-handleKeyPress (EventKey (SpecialKey KeyDown) Down _ _) brd = boardCArrow brd (0.0, 10) -- вниз
-handleKeyPress (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCArrow brd (10, 0.0) -- влево
-handleKeyPress (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCArrow brd (-10, 0.0) -- вправо
-handleKeyPress (EventKey (MouseButton WheelUp) _ _ _) brd = boardCZ brd True -- zoom in
-handleKeyPress (EventKey (MouseButton WheelDown) _ _ _) brd = boardCZ brd False -- zoom out
-handleKeyPress (EventKey (SpecialKey KeyPageUp) _ _ _) brd = boardCZ brd True -- zoom in
-handleKeyPress (EventKey (SpecialKey KeyPageDown) _ _ _) brd = boardCZ brd False -- zoom out
-handleKeyPress (EventMotion (x, y)) brd =
-  if rmb brd -- драг
+handleKeyPress patterns (EventKey (MouseButton RightButton) Down _ (xc, yc)) brd = boardCRMB brd True (xc, yc)
+handleKeyPress patterns (EventKey (MouseButton RightButton) Up _ (xc, yc)) brd = boardCRMB brd False (xc, yc)
+handleKeyPress patterns (EventKey (SpecialKey KeyUp) Down _ _) brd = boardCArrow brd (0.0, -10)
+handleKeyPress patterns (EventKey (SpecialKey KeyDown) Down _ _) brd = boardCArrow brd (0.0, 10)
+handleKeyPress patterns (EventKey (SpecialKey KeyLeft) Down _ _) brd = boardCArrow brd (10, 0.0)
+handleKeyPress patterns (EventKey (SpecialKey KeyRight) Down _ _) brd = boardCArrow brd (-10, 0.0)
+handleKeyPress patterns (EventKey (SpecialKey KeyPageUp) _ _ _) brd = boardCZ brd True
+handleKeyPress patterns (EventKey (SpecialKey KeyPageDown) _ _ _) brd = boardCZ brd False
+handleKeyPress patterns (EventMotion (x, y)) brd =
+  if rmb brd
     then boardCDrag brd (x, y)
     else brd
-handleKeyPress (EventKey (Char a) Down _ (xc, yc)) brd =  -- нарисовать ячейку
-  if ind >= 0 && ind < (templLength allDraws)
-    then addElementsToBoard brd pos (allDraws !! ind)
-    else
-      if a == 'r'
-        then boardCR brd
-        else if a =='c'
-          then boardCC brd []
-          else brd
-  where
-    pos = calcCoords brd (xc, yc)
-    ind = ord a - ord '0' - 1
-handleKeyPress _ brd = brd -- Ignore other events
+handleKeyPress patterns (EventKey (Char a) Down _ (xc, yc)) brd =
+  if a == 'r'
+    then boardCR brd
+    else brd
+handleKeyPress _ _ brd = brd
 
-main = play window background fps example render handleKeyPress update -- Главная функция GUI
+main :: IO ()
+main = do
+  patterns <- loadPatterns "patterns.txt"
+  play window background fps example (render patterns) (handleKeyPress patterns) update
   where
     window = InWindow "Haskell Conway's Game of Life" (800, 600) (50, 50)
     background = white
     fps = speed
 
+loadPatterns :: FilePath -> IO [(String, [Pos])] -- Функция чтение шаблонов из файла
+loadPatterns path = do
+  contents <- readFile path
+  return $ map parsePattern (lines contents)
 
--- Шаблоны
-dart :: [Pos]
-dart = [(0, 0), (1, 1), (-1, 1), (2, 2), (-2, 2), (0, 3), (1, 3), (-1, 3), (2, 5), (-2, 5), (3, 5), (-3, 5), (1, 6), (-1, 6), (5, 6), (-5, 6), (1, 7), (-1, 7), (5, 7), (-5, 7), (6, 7), (-6, 7), (1, 8), (-1, 8), (7, 8), (-7, 8), (1, 9), (-1, 9), (3, 9), (-3, 9), (4, 9), (-4, 9), (-6, 9), (6, 9)]
-
-clock :: [Pos]
-clock = [(0, 0), (1, 1), (2, 1), (0, 2), (-1, 2), (1, 3)]
-
-arrow :: [Pos]
-arrow = [(0, 0), (1, 1), (-1, 1), (0, 2), (0, 3), (2, 3), (3, 3), (-2, 3), (-3, 3), (0, 4), (0, 5), (2, 5), (-2, 5), (0, 6)]
-
-gospelGun :: [Pos]
-gospelGun = [(0, 0), (-1, 0), (-1, 1), (-2, 2), (-1, -1), (-2, -2), (-3, 0), (-4, -3), (-4, 3), (-5, -3), (-5, 3), (-6, -2), (-6, 2), (-7, -1), (-7, 1), (-7, 0), (-16, 0), (-16, -1), (-17, 0), (-17, -1), (3, -1), (3, -2), (3, -3), (4, -1), (4, -2), (4, -3), (5, -4), (5, 0), (7, -4), (7, 0), (7, -5), (7, 1), (17, -2), (17, -3), (18, -2), (18, -3)]
-
-glider :: [Pos]
-glider = [(0, 0), (0, 1), (0, 2), (1, 2), (2, 1)]
-
-pulsar :: [Pos]
-pulsar = [(0, 0), (1, 0), (2, 0), (2, 1), (0, 6), (1, 6), (2, 6), (2, 5), (4, -2), (4, -3), (4, -4), (5, -2), (9, -2), (10, -2), (10, -3), (10, -4), (4, 8), (4, 9), (4, 10), (5, 8), (9, 8), (10, 9), (10, 10), (10, 8), (12, 0), (13, 0), (14, 0), (12, 1), (12, 6), (13, 6), (14, 6), (12, 5), (4, 1), (4, 2), (5, 2), (5, 0), (6, 0), (6, 1), (8, 0), (8, 1), (9, 0), (10, 1), (10, 2), (9, 2), (4, 4), (4, 5), (5, 4), (6, 5), (6, 6), (5, 6), (8, 5), (8, 6), (9, 6), (9, 4), (10, 4), (10, 5)]
-
-turtle :: [Pos]
-turtle = [(0, 0), (0, 1), (1, 2), (1, -1), (1, -3), (1, -4), (2, -3), (2, -4), (3, -4), (1, 4), (1, 5), (2, 4), (2, 5), (3, 5), (3, -2), (4, -2), (5, -2), (5, -3), (4, -1), (3, 3), (4, 3), (5, 3), (5, 4), (4, 2), (5, 0), (5, 1), (6, -1), (6, 2), (7, -3), (8, -3), (7, 4), (8, 4), (10, -3), (10, -2), (10, -1), (10, 0), (11, -3), (11, -4), (10, 4), (10, 3), (10, 2), (10, 1), (11, 4), (11, 5)]
-
-allDraws :: [[Pos]] -- все шаблоны
-allDraws = [glider, dart, clock, arrow, gospelGun, turtle, pulsar]
-
-templLength :: [[Pos]] -> Int -- функция рассчета количества шаблонов 
-templLength = foldr (\x -> (+) 1) 0
+parsePattern :: String -> (String, [Pos]) -- Функция парсинга шаблонов в файле
+parsePattern line =
+  let (name, rest) = break (== ':') line
+      positions = read (drop 2 rest) :: [Pos]
+   in (name, positions)
